@@ -38,13 +38,19 @@ def fetch_nav(fund: dict, period: str = "10d") -> tuple[str | None, pd.DataFrame
             ticker = yf.Ticker(ticker_symbol)
             hist = ticker.history(period=period)
             if hist.empty or "Close" not in hist.columns:
+                print(f"  {ticker_symbol}: no data returned")
                 continue
             closes = hist[["Close"]].dropna()
             if len(closes) < 1:
+                print(f"  {ticker_symbol}: no closing prices")
                 continue
             return ticker_symbol, closes
         except Exception as e:
-            print(f"  Warning: {ticker_symbol} failed: {e}")
+            err_msg = str(e)
+            if "curl" in err_msg.lower() or "connect" in err_msg.lower():
+                print(f"  {ticker_symbol}: network error (check internet connection)")
+            else:
+                print(f"  {ticker_symbol}: {e}")
             continue
     return None, pd.DataFrame()
 
@@ -137,6 +143,10 @@ def update_history(results: list[dict], backfill: bool = False) -> pd.DataFrame:
         for r in results:
             if r["current_nav"] is not None:
                 row[r["name"]] = r["current_nav"]
+        # Don't write a row if no funds returned data
+        if len(row) <= 1:
+            print("  WARNING: No fund data to save. Skipping history update.")
+            return history
         new_row = pd.DataFrame([row])
         history = history[history["date"] != today]
         history = pd.concat([history, new_row], ignore_index=True)
