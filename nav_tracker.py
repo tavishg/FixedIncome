@@ -6,6 +6,7 @@ Fetches daily NAV data for a list of fixed income funds, calculates
 day-over-day changes, and outputs results to an Excel workbook.
 """
 
+import argparse
 import os
 import sys
 from datetime import datetime, timedelta
@@ -23,15 +24,19 @@ OUTPUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "output")
 HISTORY_FILE = os.path.join(DATA_DIR, "nav_history.csv")
 
 
-def fetch_nav(fund: dict) -> tuple[str | None, pd.DataFrame]:
-    """Fetch recent NAV history for a fund, trying each ticker in order.
+def fetch_nav(fund: dict, period: str = "10d") -> tuple[str | None, pd.DataFrame]:
+    """Fetch NAV history for a fund, trying each ticker in order.
+
+    Args:
+        fund: Fund config dict with 'tickers' list.
+        period: yfinance period string (e.g., "10d", "1mo", "3mo").
 
     Returns (working_ticker, dataframe_of_close_prices) or (None, empty_df).
     """
     for ticker_symbol in fund["tickers"]:
         try:
             ticker = yf.Ticker(ticker_symbol)
-            hist = ticker.history(period="10d")
+            hist = ticker.history(period=period)
             if hist.empty or "Close" not in hist.columns:
                 continue
             closes = hist[["Close"]].dropna()
@@ -44,12 +49,12 @@ def fetch_nav(fund: dict) -> tuple[str | None, pd.DataFrame]:
     return None, pd.DataFrame()
 
 
-def fetch_all_navs() -> list[dict]:
+def fetch_all_navs(period: str = "10d") -> list[dict]:
     """Fetch NAV data for all configured funds."""
     results = []
     for fund in FUNDS:
         print(f"Fetching: {fund['name']}...")
-        ticker_used, closes = fetch_nav(fund)
+        ticker_used, closes = fetch_nav(fund, period=period)
 
         if ticker_used is None:
             print(f"  FAILED - no working ticker found for {fund['name']}")
@@ -65,7 +70,7 @@ def fetch_all_navs() -> list[dict]:
             })
             continue
 
-        print(f"  OK - using {ticker_used}")
+        print(f"  OK - using {ticker_used} ({len(closes)} data points)")
 
         if len(closes) >= 2:
             current_nav = closes["Close"].iloc[-1]
@@ -88,31 +93,56 @@ def fetch_all_navs() -> list[dict]:
             "change_dollar": round(change_dollar, 4) if change_dollar is not None else None,
             "change_pct": round(change_pct, 4) if change_pct is not None else None,
             "nav_date": nav_date,
+            "closes": closes,  # Keep full series for backfill
         })
 
     return results
 
 
-def update_history(results: list[dict]) -> pd.DataFrame:
-    """Append today's NAV data to the history CSV and return the full history."""
-    today = datetime.now().strftime("%Y-%m-%d")
+def update_history(results: list[dict], backfill: bool = False) -> pd.DataFrame:
+    """Append NAV data to the history CSV and return the full history.
 
-    # Build today's row: date + NAV for each fund
-    row = {"date": today}
-    for r in results:
-        if r["current_nav"] is not None:
-            row[r["name"]] = r["current_nav"]
-
-    new_row = pd.DataFrame([row])
-
+    If backfill=True, writes all available historical dates from the fetched data.
+    Otherwise, only writes today's NAV.
+    """
     if os.path.exists(HISTORY_FILE):
         history = pd.read_csv(HISTORY_FILE)
-        # Remove any existing row for today (in case of re-run)
+    else:
+        history = pd.DataFrame(columns=["date"])
+
+    if backfill:
+        # Build a row per date from the full close series
+        all_dates = set()
+        for r in results:
+            closes = r.get("closes")
+            if closes is not None and not closes.empty:
+                for dt in closes.index:
+                    all_dates.add(dt.strftime("%Y-%m-%d"))
+
+        for date_str in sorted(all_dates):
+            row = {"date": date_str}
+            for r in results:
+                closes = r.get("closes")
+                if closes is not None and not closes.empty:
+                    matching = closes[closes.index.strftime("%Y-%m-%d") == date_str]
+                    if not matching.empty:
+                        row[r["name"]] = round(float(matching["Close"].iloc[0]), 4)
+            new_row = pd.DataFrame([row])
+            # Remove existing row for this date (upsert)
+            history = history[history["date"] != date_str]
+            history = pd.concat([history, new_row], ignore_index=True)
+    else:
+        today = datetime.now().strftime("%Y-%m-%d")
+        row = {"date": today}
+        for r in results:
+            if r["current_nav"] is not None:
+                row[r["name"]] = r["current_nav"]
+        new_row = pd.DataFrame([row])
         history = history[history["date"] != today]
         history = pd.concat([history, new_row], ignore_index=True)
-    else:
-        history = new_row
 
+    # Sort by date and save
+    history = history.sort_values("date").reset_index(drop=True)
     history.to_csv(HISTORY_FILE, index=False)
     return history
 
@@ -233,22 +263,36 @@ def write_excel(results: list[dict], history: pd.DataFrame):
 
 
 def main():
+    parser = argparse.ArgumentParser(description="Daily NAV Change Tracker")
+    parser.add_argument(
+        "--backfill", action="store_true",
+        help="Fetch and store ~1 month of historical NAV data"
+    )
+    args = parser.parse_args()
+
     os.makedirs(DATA_DIR, exist_ok=True)
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
+    period = "2mo" if args.backfill else "10d"
+    mode = "BACKFILL (past month)" if args.backfill else "Daily"
+
     print("=" * 60)
-    print("Daily NAV Change Tracker")
+    print(f"Daily NAV Change Tracker - {mode}")
     print(f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
     print("=" * 60)
     print()
 
     # Fetch NAV data for all funds
-    results = fetch_all_navs()
+    results = fetch_all_navs(period=period)
 
     # Update history
     print()
     print("Updating NAV history...")
-    history = update_history(results)
+    history = update_history(results, backfill=args.backfill)
+
+    # Clean up closes from results before Excel (not needed there)
+    for r in results:
+        r.pop("closes", None)
 
     # Generate Excel
     print("Generating Excel report...")
