@@ -12,6 +12,7 @@ import sys
 from datetime import datetime, timedelta
 
 import pandas as pd
+import requests
 import yfinance as yf
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, numbers
@@ -55,12 +56,104 @@ def fetch_nav(fund: dict, period: str = "10d") -> tuple[str | None, pd.DataFrame
     return None, pd.DataFrame()
 
 
+def _get_morningstar_token() -> str | None:
+    """Scrape a bearer token from Morningstar for their chart API."""
+    try:
+        url = "https://www.morningstar.com/funds/xnas/afozx/chart"
+        headers = {"user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+        resp = requests.get(url, headers=headers, timeout=15)
+        text = resp.text
+        idx = text.find("token")
+        if idx == -1:
+            return None
+        token_start = text[idx:]
+        return token_start[7:token_start.find("}") - 1]
+    except Exception as e:
+        print(f"  Morningstar token fetch failed: {e}")
+        return None
+
+
+def fetch_nav_morningstar(fund: dict, period: str = "10d") -> tuple[str | None, pd.DataFrame]:
+    """Fallback: fetch NAV history from Morningstar chart API.
+
+    Uses the fund's 'morningstar_id' field (e.g., '0P0000MOQD').
+    Returns (ticker_label, closes_df) or (None, empty_df).
+    """
+    ms_id = fund.get("morningstar_id")
+    if not ms_id:
+        return None, pd.DataFrame()
+
+    token = _get_morningstar_token()
+    if not token:
+        print(f"  Morningstar: could not obtain bearer token")
+        return None, pd.DataFrame()
+
+    # Map yfinance period strings to days
+    period_days = {"5d": 5, "10d": 10, "1mo": 30, "2mo": 60, "3mo": 90}
+    days = period_days.get(period, 60)
+    end_date = datetime.now()
+    start_date = end_date - timedelta(days=days)
+
+    try:
+        url = "https://www.us-api.morningstar.com/QS-markets/chartservice/v2/timeseries"
+        headers = {
+            "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "authorization": f"Bearer {token}",
+        }
+        params = {
+            "query": f"{ms_id}:nav",
+            "frequency": "d",
+            "startDate": start_date.strftime("%Y-%m-%d"),
+            "endDate": end_date.strftime("%Y-%m-%d"),
+            "trackMarketData": "3.6.3",
+            "instid": "DOTCOM",
+        }
+        resp = requests.get(url, params=params, headers=headers, timeout=15)
+        if resp.status_code != 200:
+            print(f"  Morningstar API returned {resp.status_code}")
+            return None, pd.DataFrame()
+
+        data = resp.json()
+        if not data or "series" not in data[0]:
+            print(f"  Morningstar: no series data returned for {ms_id}")
+            return None, pd.DataFrame()
+
+        series = data[0]["series"]
+        if not series:
+            print(f"  Morningstar: empty series for {ms_id}")
+            return None, pd.DataFrame()
+
+        # Convert to DataFrame matching yfinance format
+        rows = []
+        for point in series:
+            dt = datetime.strptime(point["date"], "%Y-%m-%d")
+            rows.append({"Date": dt, "Close": point["value"]})
+
+        df = pd.DataFrame(rows).set_index("Date")
+        df.index = pd.to_datetime(df.index).tz_localize("America/Toronto")
+        df = df.dropna()
+
+        if df.empty:
+            print(f"  Morningstar: no valid data points for {ms_id}")
+            return None, pd.DataFrame()
+
+        return f"MS:{ms_id}", df
+
+    except Exception as e:
+        print(f"  Morningstar fallback failed for {ms_id}: {e}")
+        return None, pd.DataFrame()
+
+
 def fetch_all_navs(period: str = "10d") -> list[dict]:
     """Fetch NAV data for all configured funds."""
     results = []
     for fund in FUNDS:
         print(f"Fetching: {fund['name']}...")
         ticker_used, closes = fetch_nav(fund, period=period)
+
+        if ticker_used is None and fund.get("morningstar_id"):
+            print(f"  Trying Morningstar fallback...")
+            ticker_used, closes = fetch_nav_morningstar(fund, period=period)
 
         if ticker_used is None:
             print(f"  FAILED - no working ticker found for {fund['name']}")
@@ -338,7 +431,9 @@ def main():
         pct = f"{r['change_pct']:+.2f}%" if r["change_pct"] is not None else "N/A"
         print(f"{r['name']:<35} {nav:>10} {chg:>10} {pct:>8}")
 
-    return 0 if failed == 0 else 1
+    # Exit 0 if at least some funds succeeded (so GH Actions commits the data).
+    # Only exit 1 if ALL funds failed.
+    return 0 if success > 0 else 1
 
 
 if __name__ == "__main__":

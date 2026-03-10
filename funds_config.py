@@ -25,6 +25,7 @@ FUNDS = [
         "name": "Dynamic Credit Abs Return F",
         "tickers": ["DYN27550.TO", "0P0001I6W0.TO"],
         "fund_type": "mutual_fund",
+        "morningstar_id": "0P0001I6W0",
     },
     {
         "name": "Dynamic Short Term Credit PLUS F",
@@ -33,12 +34,12 @@ FUNDS = [
     },
     {
         "name": "Manulife Strategic Income F",
-        "tickers": ["MANUVIEREVST.TO", "0P0000NFNA.TO"],
+        "tickers": ["0P0000NFNA.TO"],
         "fund_type": "mutual_fund",
     },
     {
         "name": "Lysander-Canso Corp Value Bond F",
-        "tickers": ["0P0000MOQD.TO", "0P0000XXNG.TO"],
+        "tickers": ["0P0000XXNG.TO"],
         "fund_type": "mutual_fund",
     },
     {
@@ -48,12 +49,12 @@ FUNDS = [
     },
     {
         "name": "RBC Global Bond F",
-        "tickers": ["RBCGLOBALBON.TO", "0P0000718L.TO"],
+        "tickers": ["0P0000718L.TO"],
         "fund_type": "mutual_fund",
     },
     {
         "name": "Mackenzie Unconstrained FI F",
-        "tickers": ["MACKENZIEUNC.TO", "0P0001K2BW.TO"],
+        "tickers": ["0P0001K2BW.TO"],
         "fund_type": "mutual_fund",
     },
     {
@@ -70,6 +71,7 @@ FUNDS = [
         "name": "Pender Corporate Bond F",
         "tickers": ["0P0000MOQD.TO", "PENDERBONDD.TO"],
         "fund_type": "mutual_fund",
+        "morningstar_id": "0P0000MOQD",
     },
     {
         "name": "DXDB Dynamic Discount Bond ETF",
