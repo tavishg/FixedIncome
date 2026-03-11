@@ -156,7 +156,13 @@ def fetch_nav_morningstar(fund: dict, period: str = "10d") -> tuple[str | None, 
 
 
 def fetch_all_navs(period: str = "10d") -> list[dict]:
-    """Fetch NAV data for all configured funds."""
+    """Fetch NAV data for all configured funds.
+
+    Only uses completed trading days (excludes today's partial data) so that
+    ETFs (which have intraday prices) and mutual funds (end-of-day NAV only)
+    are always on the same footing.
+    """
+    today_str = datetime.now().strftime("%Y-%m-%d")
     results = []
     for fund in FUNDS:
         print(f"Fetching: {fund['name']}...")
@@ -181,6 +187,22 @@ def fetch_all_navs(period: str = "10d") -> list[dict]:
             results.append({
                 "name": fund["name"],
                 "ticker": "N/A",
+                "current_nav": None,
+                "previous_nav": None,
+                "change_dollar": None,
+                "change_pct": None,
+                "nav_date": None,
+            })
+            continue
+
+        # Drop today's data — use only completed trading days.
+        # ETFs have partial intraday prices; MFs publish after close.
+        closes = closes[closes.index.strftime("%Y-%m-%d") != today_str]
+        if closes.empty:
+            print(f"  {ticker_used}: no completed trading day data yet")
+            results.append({
+                "name": fund["name"],
+                "ticker": ticker_used,
                 "current_nav": None,
                 "previous_nav": None,
                 "change_dollar": None,
@@ -251,17 +273,22 @@ def update_history(results: list[dict], backfill: bool = False) -> pd.DataFrame:
             history = history[history["date"] != date_str]
             history = pd.concat([history, new_row], ignore_index=True)
     else:
-        today = datetime.now().strftime("%Y-%m-%d")
-        row = {"date": today}
+        # Use the most recent nav_date from the results (previous trading day)
+        # rather than today's date, since we only track completed days.
+        nav_dates = [r["nav_date"] for r in results if r.get("nav_date")]
+        if not nav_dates:
+            print("  WARNING: No fund data to save. Skipping history update.")
+            return history
+        report_date = max(nav_dates)
+        row = {"date": report_date}
         for r in results:
             if r["current_nav"] is not None:
                 row[r["name"]] = r["current_nav"]
-        # Don't write a row if no funds returned data
         if len(row) <= 1:
             print("  WARNING: No fund data to save. Skipping history update.")
             return history
         new_row = pd.DataFrame([row])
-        history = history[history["date"] != today]
+        history = history[history["date"] != report_date]
         history = pd.concat([history, new_row], ignore_index=True)
 
     # Sort by date and save
