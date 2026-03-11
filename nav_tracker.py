@@ -162,6 +162,15 @@ def fetch_all_navs(period: str = "10d") -> list[dict]:
         print(f"Fetching: {fund['name']}...")
         ticker_used, closes = fetch_nav(fund, period=period)
 
+        # If long period failed, retry with shorter periods (some tickers
+        # only have recent data available on Yahoo Finance)
+        if ticker_used is None and period in ("2mo", "3mo"):
+            for shorter in ("1mo", "10d"):
+                print(f"  Retrying with period={shorter}...")
+                ticker_used, closes = fetch_nav(fund, period=shorter)
+                if ticker_used is not None:
+                    break
+
         if ticker_used is None and fund.get("morningstar_ids"):
             print(f"  Trying Morningstar fallback...")
             ticker_used, closes = fetch_nav_morningstar(fund, period=period)
@@ -314,9 +323,9 @@ def write_excel(results: list[dict], history: pd.DataFrame):
         # Change % with conditional formatting
         pct_val = r["change_pct"]
         cell = ws1.cell(row=row_idx, column=7,
-                        value=pct_val if pct_val is not None else "N/A")
+                        value=pct_val / 100 if isinstance(pct_val, (int, float)) else "N/A")
         if isinstance(pct_val, (int, float)):
-            cell.number_format = '0.00"%"'
+            cell.number_format = '0.00%'
             if pct_val > 0:
                 cell.font = green_font
                 cell.fill = green_fill
@@ -355,9 +364,10 @@ def write_excel(results: list[dict], history: pd.DataFrame):
                 change_history.iloc[::-1].iterrows(), 2):
             ws2.cell(row=row_idx, column=1, value=date)
             for col_idx, val in enumerate(row_data, 2):
-                cell = ws2.cell(row=row_idx, column=col_idx, value=val if pd.notna(val) else "")
+                cell = ws2.cell(row=row_idx, column=col_idx,
+                                value=val / 100 if pd.notna(val) else "")
                 if pd.notna(val):
-                    cell.number_format = '0.00"%"'
+                    cell.number_format = '0.00%'
                     if val > 0:
                         cell.font = green_font
                         cell.fill = green_fill
