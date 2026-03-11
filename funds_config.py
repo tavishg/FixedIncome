@@ -8,14 +8,18 @@ Each fund has:
 
 Ticker formats:
   - ETFs on TSX use ".TO" suffix (e.g., XCB.TO)
-  - Some mutual funds use long-form names with ".TO" suffix (e.g., MANUVIEREVST.TO)
+  - Some mutual funds use long-form names with ".TO" suffix
   - Some mutual funds use Morningstar IDs with ".TO" suffix (e.g., 0P0000MOQD.TO)
+  - US-listed mutual fund tickers (e.g., DBZBX) work without suffix
 
 NOTE: The ".CF" suffix (Globe & Mail / CADFUNDS format) does NOT work with yfinance.
 If a fund's primary ticker doesn't work, update it here.
+
+Order: Dynamic funds first, then ETFs, then other mutual funds.
 """
 
 FUNDS = [
+    # --- Dynamic Funds ---
     {
         "name": "Dynamic Global FI Fund F",
         "tickers": ["DXBG.TO", "0P0001OE5B.TO"],
@@ -23,13 +27,41 @@ FUNDS = [
     },
     {
         "name": "Dynamic Credit Abs Return F",
-        "tickers": ["DYN27550.TO", "0P0001I6W0.TO"],
+        # Series F tickers first, then US-listed and Series A fallbacks
+        # (same portfolio, daily % changes nearly identical)
+        "tickers": [
+            "DYN27550.TO",     # Series F (FundSERV code)
+            "0P0001I6W0.TO",   # Fund II Series A (Morningstar ID)
+            "DBZBX",           # US Nasdaq listing (Series F1 NL)
+        ],
         "fund_type": "mutual_fund",
         "morningstar_ids": ["0P0001I6W0"],
     },
     {
         "name": "Dynamic Short Term Credit PLUS F",
         "tickers": ["DXCP.TO", "0P0001OE4X.TO"],
+        "fund_type": "mutual_fund",
+    },
+    # --- ETFs ---
+    {
+        "name": "DXDB Dynamic Discount Bond ETF",
+        "tickers": ["DXDB.TO"],
+        "fund_type": "etf",
+    },
+    {
+        "name": "XIG US IG Corp Bond (CAD Hdg)",
+        "tickers": ["XIG.TO"],
+        "fund_type": "etf",
+    },
+    {
+        "name": "XCB Cdn Corporate Bond",
+        "tickers": ["XCB.TO"],
+        "fund_type": "etf",
+    },
+    # --- Other Mutual Funds ---
+    {
+        "name": "PIMCO Monthly Income F",
+        "tickers": ["PMIF.TO", "0P0000S9O5.TO"],
         "fund_type": "mutual_fund",
     },
     {
@@ -41,31 +73,6 @@ FUNDS = [
         "name": "Lysander-Canso Corp Value Bond F",
         "tickers": ["0P0000XXNG.TO"],
         "fund_type": "mutual_fund",
-    },
-    {
-        "name": "PIMCO Monthly Income F",
-        "tickers": ["PMIF.TO", "0P0000S9O5.TO"],
-        "fund_type": "mutual_fund",
-    },
-    {
-        "name": "RBC Global Bond F",
-        "tickers": ["0P0000718L.TO"],
-        "fund_type": "mutual_fund",
-    },
-    {
-        "name": "Mackenzie Unconstrained FI F",
-        "tickers": ["0P0001K2BW.TO"],
-        "fund_type": "mutual_fund",
-    },
-    {
-        "name": "XIG US IG Corp Bond (CAD Hdg)",
-        "tickers": ["XIG.TO"],
-        "fund_type": "etf",
-    },
-    {
-        "name": "XCB Cdn Corporate Bond",
-        "tickers": ["XCB.TO"],
-        "fund_type": "etf",
     },
     {
         "name": "Pender Corporate Bond F",
@@ -82,13 +89,18 @@ FUNDS = [
         "morningstar_ids": ["0P0000MOQD", "0P0000TISC"],
     },
     {
-        "name": "DXDB Dynamic Discount Bond ETF",
-        "tickers": ["DXDB.TO"],
-        "fund_type": "etf",
-    },
-    {
         "name": "Lysander-Fulcra Corp Sec F",
         "tickers": ["0P0001CIH7.TO"],
+        "fund_type": "mutual_fund",
+    },
+    {
+        "name": "RBC Global Bond F",
+        "tickers": ["0P0000718L.TO"],
+        "fund_type": "mutual_fund",
+    },
+    {
+        "name": "Mackenzie Unconstrained FI F",
+        "tickers": ["0P0001K2BW.TO"],
         "fund_type": "mutual_fund",
     },
     {
