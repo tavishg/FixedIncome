@@ -69,7 +69,15 @@ FUNDS = [
     },
     {
         "name": "Pender Corporate Bond F",
-        "tickers": ["0P0000MOQD.TO", "PENDERBONDD.TO"],
+        # Series F tickers first, then Series D/A as fallbacks (same portfolio,
+        # daily % changes are nearly identical — only MER differs slightly)
+        "tickers": [
+            "0P0000MOQD.TO",   # Series F (Morningstar ID)
+            "PENDERBONDD.TO",  # Series F (long-form)
+            "F00000W3SV.TO",   # Series D (same portfolio, lower MER than A)
+            "PENDERCORPOR.TO", # Series A
+            "0P0000MOQB.TO",   # Series A (Morningstar ID)
+        ],
         "fund_type": "mutual_fund",
         "morningstar_ids": ["0P0000MOQD", "0P0000TISC"],
     },
