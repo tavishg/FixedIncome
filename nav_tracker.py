@@ -56,8 +56,14 @@ def fetch_nav(fund: dict, period: str = "10d") -> tuple[str | None, pd.DataFrame
     return None, pd.DataFrame()
 
 
+_morningstar_token_cache: str | None = None
+
+
 def _get_morningstar_token() -> str | None:
-    """Scrape a bearer token from Morningstar for their chart API."""
+    """Scrape a bearer token from Morningstar for their chart API (cached)."""
+    global _morningstar_token_cache
+    if _morningstar_token_cache is not None:
+        return _morningstar_token_cache
     try:
         url = "https://www.morningstar.com/funds/xnas/afozx/chart"
         headers = {"user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
@@ -67,33 +73,16 @@ def _get_morningstar_token() -> str | None:
         if idx == -1:
             return None
         token_start = text[idx:]
-        return token_start[7:token_start.find("}") - 1]
+        token = token_start[7:token_start.find("}") - 1]
+        _morningstar_token_cache = token
+        return token
     except Exception as e:
         print(f"  Morningstar token fetch failed: {e}")
         return None
 
 
-def fetch_nav_morningstar(fund: dict, period: str = "10d") -> tuple[str | None, pd.DataFrame]:
-    """Fallback: fetch NAV history from Morningstar chart API.
-
-    Uses the fund's 'morningstar_id' field (e.g., '0P0000MOQD').
-    Returns (ticker_label, closes_df) or (None, empty_df).
-    """
-    ms_id = fund.get("morningstar_id")
-    if not ms_id:
-        return None, pd.DataFrame()
-
-    token = _get_morningstar_token()
-    if not token:
-        print(f"  Morningstar: could not obtain bearer token")
-        return None, pd.DataFrame()
-
-    # Map yfinance period strings to days
-    period_days = {"5d": 5, "10d": 10, "1mo": 30, "2mo": 60, "3mo": 90}
-    days = period_days.get(period, 60)
-    end_date = datetime.now()
-    start_date = end_date - timedelta(days=days)
-
+def _fetch_morningstar_series(ms_id: str, token: str, start_date, end_date) -> pd.DataFrame | None:
+    """Fetch NAV time series for a single Morningstar security ID."""
     try:
         url = "https://www.us-api.morningstar.com/QS-markets/chartservice/v2/timeseries"
         headers = {
@@ -110,20 +99,19 @@ def fetch_nav_morningstar(fund: dict, period: str = "10d") -> tuple[str | None, 
         }
         resp = requests.get(url, params=params, headers=headers, timeout=15)
         if resp.status_code != 200:
-            print(f"  Morningstar API returned {resp.status_code}")
-            return None, pd.DataFrame()
+            print(f"  Morningstar API returned {resp.status_code} for {ms_id}")
+            return None
 
         data = resp.json()
         if not data or "series" not in data[0]:
-            print(f"  Morningstar: no series data returned for {ms_id}")
-            return None, pd.DataFrame()
+            print(f"  Morningstar: no series data for {ms_id}")
+            return None
 
         series = data[0]["series"]
         if not series:
             print(f"  Morningstar: empty series for {ms_id}")
-            return None, pd.DataFrame()
+            return None
 
-        # Convert to DataFrame matching yfinance format
         rows = []
         for point in series:
             dt = datetime.strptime(point["date"], "%Y-%m-%d")
@@ -132,16 +120,39 @@ def fetch_nav_morningstar(fund: dict, period: str = "10d") -> tuple[str | None, 
         df = pd.DataFrame(rows).set_index("Date")
         df.index = pd.to_datetime(df.index).tz_localize("America/Toronto")
         df = df.dropna()
-
-        if df.empty:
-            print(f"  Morningstar: no valid data points for {ms_id}")
-            return None, pd.DataFrame()
-
-        return f"MS:{ms_id}", df
+        return df if not df.empty else None
 
     except Exception as e:
-        print(f"  Morningstar fallback failed for {ms_id}: {e}")
+        print(f"  Morningstar failed for {ms_id}: {e}")
+        return None
+
+
+def fetch_nav_morningstar(fund: dict, period: str = "10d") -> tuple[str | None, pd.DataFrame]:
+    """Fallback: fetch NAV history from Morningstar chart API.
+
+    Tries each ID in fund['morningstar_ids'] until one returns data.
+    Returns (ticker_label, closes_df) or (None, empty_df).
+    """
+    ms_ids = fund.get("morningstar_ids", [])
+    if not ms_ids:
         return None, pd.DataFrame()
+
+    token = _get_morningstar_token()
+    if not token:
+        print(f"  Morningstar: could not obtain bearer token")
+        return None, pd.DataFrame()
+
+    period_days = {"5d": 5, "10d": 10, "1mo": 30, "2mo": 60, "3mo": 90}
+    days = period_days.get(period, 60)
+    end_date = datetime.now()
+    start_date = end_date - timedelta(days=days)
+
+    for ms_id in ms_ids:
+        df = _fetch_morningstar_series(ms_id, token, start_date, end_date)
+        if df is not None:
+            return f"MS:{ms_id}", df
+
+    return None, pd.DataFrame()
 
 
 def fetch_all_navs(period: str = "10d") -> list[dict]:
@@ -151,7 +162,7 @@ def fetch_all_navs(period: str = "10d") -> list[dict]:
         print(f"Fetching: {fund['name']}...")
         ticker_used, closes = fetch_nav(fund, period=period)
 
-        if ticker_used is None and fund.get("morningstar_id"):
+        if ticker_used is None and fund.get("morningstar_ids"):
             print(f"  Trying Morningstar fallback...")
             ticker_used, closes = fetch_nav_morningstar(fund, period=period)
 

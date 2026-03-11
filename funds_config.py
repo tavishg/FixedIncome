@@ -25,7 +25,7 @@ FUNDS = [
         "name": "Dynamic Credit Abs Return F",
         "tickers": ["DYN27550.TO", "0P0001I6W0.TO"],
         "fund_type": "mutual_fund",
-        "morningstar_id": "0P0001I6W0",
+        "morningstar_ids": ["0P0001I6W0"],
     },
     {
         "name": "Dynamic Short Term Credit PLUS F",
@@ -71,7 +71,7 @@ FUNDS = [
         "name": "Pender Corporate Bond F",
         "tickers": ["0P0000MOQD.TO", "PENDERBONDD.TO"],
         "fund_type": "mutual_fund",
-        "morningstar_id": "0P0000MOQD",
+        "morningstar_ids": ["0P0000MOQD", "0P0000TISC"],
     },
     {
         "name": "DXDB Dynamic Discount Bond ETF",
