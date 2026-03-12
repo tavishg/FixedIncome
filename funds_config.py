@@ -5,6 +5,8 @@ Each fund has:
   - name: Short display name for Excel output
   - tickers: List of Yahoo Finance tickers to try (in order of preference)
   - fund_type: "etf" or "mutual_fund"
+  - morningstar_ids: (optional) Morningstar security IDs for chart API fallback
+  - morningstar_search: (optional) search term for Morningstar screener API fallback
 
 Ticker formats:
   - ETFs on TSX use ".TO" suffix (e.g., XCB.TO)
@@ -15,7 +17,7 @@ Ticker formats:
 NOTE: The ".CF" suffix (Globe & Mail / CADFUNDS format) does NOT work with yfinance.
 If a fund's primary ticker doesn't work, update it here.
 
-Order: Dynamic funds first, then ETFs, then other mutual funds.
+Order: Dynamic funds first, then Lysander, then Pender, then others.
 """
 
 FUNDS = [
@@ -36,18 +38,46 @@ FUNDS = [
         ],
         "fund_type": "mutual_fund",
         "morningstar_ids": ["0P0001I6W0"],
+        # Fallback: search Morningstar screener by name to find correct securityID
+        "morningstar_search": "Dynamic Credit Absolute Return",
     },
     {
         "name": "Dynamic Short Term Credit PLUS F",
         "tickers": ["DXCP.TO", "0P0001OE4X.TO"],
         "fund_type": "mutual_fund",
     },
-    # --- ETFs ---
     {
         "name": "DXDB Dynamic Discount Bond ETF",
         "tickers": ["DXDB.TO"],
         "fund_type": "etf",
     },
+    # --- Lysander Funds ---
+    {
+        "name": "Lysander-Canso Corp Value Bond F",
+        "tickers": ["0P0000XXNG.TO"],
+        "fund_type": "mutual_fund",
+    },
+    {
+        "name": "Lysander-Fulcra Corp Sec F",
+        "tickers": ["0P0001CIH7.TO"],
+        "fund_type": "mutual_fund",
+    },
+    # --- Pender ---
+    {
+        "name": "Pender Corporate Bond F",
+        # Series F tickers first, then Series D/A as fallbacks (same portfolio,
+        # daily % changes are nearly identical — only MER differs slightly)
+        "tickers": [
+            "0P0000MOQD.TO",   # Series F (Morningstar ID)
+            "PENDERBONDD.TO",  # Series F (long-form)
+            "F00000W3SV.TO",   # Series D (same portfolio, lower MER than A)
+            "PENDERCORPOR.TO", # Series A
+            "0P0000MOQB.TO",   # Series A (Morningstar ID)
+        ],
+        "fund_type": "mutual_fund",
+        "morningstar_ids": ["0P0000MOQD", "0P0000TISC"],
+    },
+    # --- ETFs ---
     {
         "name": "XIG US IG Corp Bond (CAD Hdg)",
         "tickers": ["XIG.TO"],
@@ -67,30 +97,6 @@ FUNDS = [
     {
         "name": "Manulife Strategic Income F",
         "tickers": ["0P0000NFNA.TO"],
-        "fund_type": "mutual_fund",
-    },
-    {
-        "name": "Lysander-Canso Corp Value Bond F",
-        "tickers": ["0P0000XXNG.TO"],
-        "fund_type": "mutual_fund",
-    },
-    {
-        "name": "Pender Corporate Bond F",
-        # Series F tickers first, then Series D/A as fallbacks (same portfolio,
-        # daily % changes are nearly identical — only MER differs slightly)
-        "tickers": [
-            "0P0000MOQD.TO",   # Series F (Morningstar ID)
-            "PENDERBONDD.TO",  # Series F (long-form)
-            "F00000W3SV.TO",   # Series D (same portfolio, lower MER than A)
-            "PENDERCORPOR.TO", # Series A
-            "0P0000MOQB.TO",   # Series A (Morningstar ID)
-        ],
-        "fund_type": "mutual_fund",
-        "morningstar_ids": ["0P0000MOQD", "0P0000TISC"],
-    },
-    {
-        "name": "Lysander-Fulcra Corp Sec F",
-        "tickers": ["0P0001CIH7.TO"],
         "fund_type": "mutual_fund",
     },
     {

@@ -127,15 +127,54 @@ def _fetch_morningstar_series(ms_id: str, token: str, start_date, end_date) -> p
         return None
 
 
+def _search_morningstar_ids(search_term: str) -> list[str]:
+    """Search for a fund on Morningstar's global screener and return security IDs.
+
+    Uses the same API as the mstarpy library to find funds by name.
+    Returns a list of securityIDs found (e.g. ['F00000XXXX', '0P0001YYYY']).
+    """
+    try:
+        url = "https://global.morningstar.com/api/v1/en-ca/tools/screener/_data"
+        headers = {
+            "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        }
+        params = {
+            "query": f"_ ~= '{search_term}' AND investmentType IN ('FO','FV','FM')",
+            "fields": "isin,name",
+            "limit": 20,
+        }
+        resp = requests.get(url, params=params, headers=headers, timeout=15)
+        if resp.status_code != 200:
+            print(f"  Morningstar search returned {resp.status_code}")
+            return []
+
+        data = resp.json()
+        results = data.get("results", [])
+        ids = []
+        for r in results:
+            sec_id = r.get("meta", {}).get("securityID", "")
+            perf_id = r.get("meta", {}).get("performanceID", "")
+            name = r.get("fields", {}).get("name", {}).get("value", "")
+            if sec_id:
+                print(f"  Morningstar search found: {name} -> {sec_id} (perf: {perf_id})")
+                ids.append(sec_id)
+                if perf_id and perf_id != sec_id:
+                    ids.append(perf_id)
+        return ids
+    except Exception as e:
+        print(f"  Morningstar search failed: {e}")
+        return []
+
+
 def fetch_nav_morningstar(fund: dict, period: str = "10d") -> tuple[str | None, pd.DataFrame]:
     """Fallback: fetch NAV history from Morningstar chart API.
 
     Tries each ID in fund['morningstar_ids'] until one returns data.
+    If those fail and fund has 'morningstar_search', searches by name
+    to discover new IDs and tries those too.
     Returns (ticker_label, closes_df) or (None, empty_df).
     """
-    ms_ids = fund.get("morningstar_ids", [])
-    if not ms_ids:
-        return None, pd.DataFrame()
+    ms_ids = list(fund.get("morningstar_ids", []))
 
     token = _get_morningstar_token()
     if not token:
@@ -147,10 +186,23 @@ def fetch_nav_morningstar(fund: dict, period: str = "10d") -> tuple[str | None, 
     end_date = datetime.now()
     start_date = end_date - timedelta(days=days)
 
+    # Try configured IDs first
     for ms_id in ms_ids:
         df = _fetch_morningstar_series(ms_id, token, start_date, end_date)
         if df is not None:
             return f"MS:{ms_id}", df
+
+    # If configured IDs failed, try searching by name
+    search_term = fund.get("morningstar_search", "")
+    if search_term:
+        print(f"  Searching Morningstar for '{search_term}'...")
+        discovered_ids = _search_morningstar_ids(search_term)
+        # Try IDs we haven't tried yet
+        for ms_id in discovered_ids:
+            if ms_id not in ms_ids:
+                df = _fetch_morningstar_series(ms_id, token, start_date, end_date)
+                if df is not None:
+                    return f"MS:{ms_id}", df
 
     return None, pd.DataFrame()
 
@@ -177,7 +229,7 @@ def fetch_all_navs(period: str = "10d") -> list[dict]:
                 if ticker_used is not None:
                     break
 
-        if ticker_used is None and fund.get("morningstar_ids"):
+        if ticker_used is None and (fund.get("morningstar_ids") or fund.get("morningstar_search")):
             print(f"  Trying Morningstar fallback...")
             ticker_used, closes = fetch_nav_morningstar(fund, period=period)
 
