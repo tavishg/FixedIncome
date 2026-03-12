@@ -8,6 +8,7 @@ day-over-day changes, and outputs results to an Excel workbook.
 
 import argparse
 import os
+import re
 import sys
 from datetime import datetime, timedelta
 
@@ -207,6 +208,61 @@ def fetch_nav_morningstar(fund: dict, period: str = "10d") -> tuple[str | None, 
     return None, pd.DataFrame()
 
 
+def fetch_nav_tmx(fund: dict) -> tuple[str | None, pd.DataFrame]:
+    """Fallback: scrape current NAV from TMX Money quote page.
+
+    Uses web.tmxmoney.com/quote.php to get the current price.
+    Only returns the latest NAV (no history), but enough for daily tracking.
+    """
+    symbol = fund.get("tmx_symbol", "")
+    if not symbol:
+        return None, pd.DataFrame()
+
+    try:
+        url = f"https://web.tmxmoney.com/quote.php?qm_symbol={symbol}"
+        headers = {
+            "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        }
+        resp = requests.get(url, headers=headers, timeout=15)
+        if resp.status_code != 200:
+            print(f"  TMX Money returned {resp.status_code} for {symbol}")
+            return None, pd.DataFrame()
+
+        html = resp.text
+
+        # Try to extract price from "quote-price" span
+        price_match = re.search(r'class="quote-price"[^>]*>.*?<span[^>]*>([\d.]+)</span>', html, re.DOTALL)
+        if not price_match:
+            # Try alternative patterns
+            price_match = re.search(r'quote-price[^>]*>([\d.]+)', html)
+        if not price_match:
+            # Try finding any price-like pattern near "NAV" or "Price"
+            price_match = re.search(r'(?:NAV|Price|Last)[^$\d]*\$?([\d]+\.[\d]{2,4})', html, re.IGNORECASE)
+
+        if not price_match:
+            print(f"  TMX Money: could not parse price for {symbol}")
+            return None, pd.DataFrame()
+
+        price = float(price_match.group(1))
+        # Use yesterday as the date since we only track completed days
+        yesterday = datetime.now() - timedelta(days=1)
+        # Skip weekends
+        while yesterday.weekday() >= 5:
+            yesterday -= timedelta(days=1)
+
+        df = pd.DataFrame(
+            [{"Date": yesterday, "Close": price}]
+        ).set_index("Date")
+        df.index = pd.to_datetime(df.index).tz_localize("America/Toronto")
+
+        print(f"  TMX Money: got NAV ${price:.4f} for {symbol}")
+        return f"TMX:{symbol}", df
+
+    except Exception as e:
+        print(f"  TMX Money scrape failed for {symbol}: {e}")
+        return None, pd.DataFrame()
+
+
 def fetch_all_navs(period: str = "10d") -> list[dict]:
     """Fetch NAV data for all configured funds.
 
@@ -232,6 +288,10 @@ def fetch_all_navs(period: str = "10d") -> list[dict]:
         if ticker_used is None and (fund.get("morningstar_ids") or fund.get("morningstar_search")):
             print(f"  Trying Morningstar fallback...")
             ticker_used, closes = fetch_nav_morningstar(fund, period=period)
+
+        if ticker_used is None and fund.get("tmx_symbol"):
+            print(f"  Trying TMX Money scrape...")
+            ticker_used, closes = fetch_nav_tmx(fund)
 
         if ticker_used is None:
             print(f"  FAILED - no working ticker found for {fund['name']}")

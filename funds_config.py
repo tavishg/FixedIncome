@@ -40,6 +40,8 @@ FUNDS = [
         "morningstar_ids": ["0P0001I6W0"],
         # Fallback: search Morningstar screener by name to find correct securityID
         "morningstar_search": "Dynamic Credit Absolute Return",
+        # Last resort: scrape TMX Money quote page
+        "tmx_symbol": "DYN27550",
     },
     {
         "name": "Dynamic Short Term Credit PLUS F",
