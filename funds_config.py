@@ -29,15 +29,13 @@ FUNDS = [
     },
     {
         "name": "Dynamic Credit Abs Return F",
-        # Series F tickers first, then US-listed and Series A fallbacks
-        # (same portfolio, daily % changes nearly identical)
         "tickers": [
+            "0P0001ROZ4.TO",   # Series F (correct Morningstar ID)
             "DYN27550.TO",     # Series F (FundSERV code)
-            "0P0001I6W0.TO",   # Fund II Series A (Morningstar ID)
             "DBZBX",           # US Nasdaq listing (Series F1 NL)
         ],
         "fund_type": "mutual_fund",
-        "morningstar_ids": ["0P0001I6W0"],
+        "morningstar_ids": ["0P0001ROZ4"],
         # Fallback: search Morningstar screener by name to find correct securityID
         "morningstar_search": "Dynamic Credit Absolute Return",
         # Last resort: scrape TMX Money quote page
