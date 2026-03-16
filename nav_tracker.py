@@ -403,8 +403,12 @@ def update_history(results: list[dict], backfill: bool = False) -> pd.DataFrame:
         history = history[history["date"] != report_date]
         history = pd.concat([history, new_row], ignore_index=True)
 
-    # Sort by date and save
+    # Sort by date and reorder columns to match FUNDS config order
     history = history.sort_values("date").reset_index(drop=True)
+    fund_order = [f["name"] for f in FUNDS]
+    ordered_cols = ["date"] + [c for c in fund_order if c in history.columns]
+    ordered_cols += [c for c in history.columns if c not in ordered_cols]
+    history = history[ordered_cols]
     history.to_csv(HISTORY_FILE, index=False)
     return history
 
@@ -417,6 +421,14 @@ def build_change_history(history: pd.DataFrame) -> pd.DataFrame:
     history = history.set_index("date").sort_index()
     changes = history.pct_change() * 100
     changes = changes.iloc[1:]  # Drop first row (NaN)
+
+    # Reorder columns to match FUNDS config order (Dynamic funds first, etc.)
+    fund_order = [f["name"] for f in FUNDS]
+    ordered_cols = [c for c in fund_order if c in changes.columns]
+    # Append any columns not in config (shouldn't happen, but be safe)
+    ordered_cols += [c for c in changes.columns if c not in ordered_cols]
+    changes = changes[ordered_cols]
+
     return changes.round(4)
 
 
