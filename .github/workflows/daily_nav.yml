@@ -1,10 +1,7 @@
 name: Daily NAV Tracker
 
 on:
-  schedule:
-    # Run at 10 PM UTC (6 PM ET) on weekdays, after markets close
-    - cron: '0 22 * * 1-5'
-  workflow_dispatch: {}  # Allow manual trigger
+  workflow_dispatch: {}  # Manual trigger only
 
 jobs:
   track-nav:

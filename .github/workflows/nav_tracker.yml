@@ -1,10 +1,6 @@
 name: Daily NAV Tracker
 
 on:
-  schedule:
-    # 7:30 AM PT = 14:30 UTC (during PDT) / 15:30 UTC (during PST)
-    # Using 14:30 UTC for PDT; during PST it will run at 7:30 AM PST instead
-    - cron: '30 14 * * 1-5'
   workflow_dispatch:
     inputs:
       backfill:
