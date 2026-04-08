@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       backfill:
-        description: 'Backfill ~1 month of historical data'
+        description: 'Backfill full available historical data'
         type: boolean
         default: false
 
