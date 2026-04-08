@@ -182,7 +182,7 @@ def fetch_nav_morningstar(fund: dict, period: str = "10d") -> tuple[str | None, 
         print(f"  Morningstar: could not obtain bearer token")
         return None, pd.DataFrame()
 
-    period_days = {"5d": 5, "10d": 10, "1mo": 30, "2mo": 60, "3mo": 90, "max": 3650}
+    period_days = {"5d": 5, "10d": 10, "1mo": 30, "2mo": 60, "3mo": 90, "ytd": 365}
     days = period_days.get(period, 60)
     end_date = datetime.now()
     start_date = end_date - timedelta(days=days)
@@ -278,7 +278,7 @@ def fetch_all_navs(period: str = "10d") -> list[dict]:
 
         # If long period failed, retry with shorter periods (some tickers
         # only have recent data available on Yahoo Finance)
-        if ticker_used is None and period in ("max", "3mo", "2mo"):
+        if ticker_used is None and period in ("ytd", "3mo", "2mo"):
             for shorter in ("2mo", "1mo", "10d"):
                 print(f"  Retrying with period={shorter}...")
                 ticker_used, closes = fetch_nav(fund, period=shorter)
@@ -548,8 +548,8 @@ def main():
     os.makedirs(DATA_DIR, exist_ok=True)
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-    period = "max" if args.backfill else "10d"
-    mode = "BACKFILL (full history)" if args.backfill else "Daily"
+    period = "ytd" if args.backfill else "10d"
+    mode = "BACKFILL (YTD)" if args.backfill else "Daily"
 
     print("=" * 60)
     print(f"Daily NAV Change Tracker - {mode}")
