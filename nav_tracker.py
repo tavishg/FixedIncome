@@ -31,14 +31,18 @@ def fetch_nav(fund: dict, period: str = "10d") -> tuple[str | None, pd.DataFrame
 
     Args:
         fund: Fund config dict with 'tickers' list.
-        period: yfinance period string (e.g., "10d", "1mo", "3mo").
+        period: yfinance period string (e.g., "10d", "1mo", "3mo", "ytd").
 
     Returns (working_ticker, dataframe_of_close_prices) or (None, empty_df).
     """
     for ticker_symbol in fund["tickers"]:
         try:
             ticker = yf.Ticker(ticker_symbol)
-            hist = ticker.history(period=period)
+            if period == "ytd":
+                start = f"{datetime.now().year}-01-01"
+                hist = ticker.history(start=start)
+            else:
+                hist = ticker.history(period=period)
             if hist.empty or "Close" not in hist.columns:
                 print(f"  {ticker_symbol}: no data returned")
                 continue
@@ -182,10 +186,13 @@ def fetch_nav_morningstar(fund: dict, period: str = "10d") -> tuple[str | None, 
         print(f"  Morningstar: could not obtain bearer token")
         return None, pd.DataFrame()
 
-    period_days = {"5d": 5, "10d": 10, "1mo": 30, "2mo": 60, "3mo": 90, "ytd": 365}
-    days = period_days.get(period, 60)
+    period_days = {"5d": 5, "10d": 10, "1mo": 30, "2mo": 60, "3mo": 90}
     end_date = datetime.now()
-    start_date = end_date - timedelta(days=days)
+    if period == "ytd":
+        start_date = datetime(end_date.year, 1, 1)
+    else:
+        days = period_days.get(period, 60)
+        start_date = end_date - timedelta(days=days)
 
     # Try configured IDs first
     for ms_id in ms_ids:
